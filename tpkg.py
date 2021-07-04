@@ -8,7 +8,16 @@ import sys
 from subprocess import PIPE
 
 import requests
-from progress.bar import Bar
+
+
+def cop(m, t):
+    if m == 'info':
+        rt = '\033[0;34m[info]\033[0m %s' % (t)
+    elif m == 'warning':
+        rt = '\033[0;33m[warning]\033[0m %s' % (t)
+    elif m == 'error':
+        rt = '\033[0;31m[error]\033[0m %s' % (t)
+    return rt
 
 
 def cmd_run(cmd):
@@ -20,7 +29,7 @@ def api_req(url, name, ec):
     api = requests.get('%s%s' % (url, name))
     if api.status_code == 200:
         if api.text == 'error':
-            print(ec)
+            print(cop('error', ec))
             sys.exit(1)
         return api.text
 
@@ -28,6 +37,7 @@ def api_req(url, name, ec):
 if cmd_run('ping -n 1 api.rainapi.cn'):
     print('无法连接到服务器')
     sys.exit(1)
+os.system('')
 os.chdir(os.path.dirname(__file__))
 os.environ['path'] = "%s%s%s" % (
     os.getenv('path'), os.path.dirname(os.path.abspath(__file__)), '\\bin')
@@ -50,62 +60,57 @@ def prog_check(prog):
 
 
 def install(prog):
-    bar = Bar('%s %s' % ('正在安装', prog), fill='▮', max=5)
+    print(cop('info', '正在安装 %s' % (prog)))
     prog_info = json.loads(
-        api_req('https://api.rainapi.cn/tpm/?o=info&v=', prog, '\n错误的软件包名称'))
-    bar.next()
+        api_req('https://api.rainapi.cn/tpm/?o=info&v=', prog, '错误的软件包名称'))
+    print(cop('info', '软件包定位成功'))
     if prog_check(prog_info['name']):
-        sr = input('\n软件包已存在，是否卸载后安装(y/n)')
+        sr = input(cop('warning', '软件包已存在，是否卸载后安装(y/n)'))
         if sr.lower() == 'y' or sr.lower() == 'yes':
             remove(prog)
         elif sr.lower() == 'n' or sr.lower() == 'no':
-            print('用户取消操作')
+            print(cop('error', '用户取消操作'))
             sys.exit(2)
         else:
-            print('错误输入')
+            print(cop('error', '错误输入'))
             sys.exit(3)
-    bar.next()
     if cmd_run('git clone %s ./programs/%s' %
                (prog_info['url'], prog_info['name'])):
-        print('\n下载失败')
+        print(cop('error', '下载失败'))
         sys.exit(1)
-    bar.next()
+    print(cop('info', '下载成功，执行安装脚本'))
     for cmd in prog_info['install'].split('\r\n'):
         cmd_run(cmd)
-    bar.next()
+    print(cop('info', '脚本执行完毕'))
     c.execute(
         'INSERT INTO "main"."packages" ("name", "version") VALUES (\'%s\', \'%s\')'
         % (prog_info['name'], prog_info['version']))
     conn.commit()
-    bar.next()
-    bar.finish()
+    print(cop('info', '安装完成'))
 
 
 def remove(prog):
-    bar = Bar('%s %s' % ('正在卸载', prog), fill='▮', max=4)
+    print(cop('info', '正在卸载 %s' % (prog)))
     rm_info = json.loads(
-        api_req('https://api.rainapi.cn/tpm/?o=remove&v=', prog, '\n错误的软件包名称'))
-    bar.next()
+        api_req('https://api.rainapi.cn/tpm/?o=remove&v=', prog, '错误的软件包名称'))
     if not prog_check(rm_info['name']):
-        print('\n软件包不存在')
+        print(cop('error', '软件包不存在'))
         sys.exit(3)
-    bar.next()
+    print(cop('info', '软件包定位成功，正在卸载'))
     cmd_run('rd /s/q programs\\%s' % (rm_info['name']))
     for cmd in rm_info['remove'].split('\r\n'):
         cmd_run(cmd)
-    bar.next()
     c.execute('DELETE FROM "main"."packages" WHERE  "name" = \'%s\'' %
               (rm_info['name']))
     conn.commit()
-    bar.next()
-    bar.finish()
+    print(cop('info', '卸载完成'))
 
 
 def update(prog):
     up_info = json.loads(
         api_req('https://api.rainapi.cn/tpm/?o=info&v=', prog, '错误的软件包名称'))
     if not prog_check(up_info['name']):
-        print('\n软件包不存在')
+        print(cop('error', '软件包不存在'))
         sys.exit(3)
     cur = c.execute(
         'SELECT "version" FROM "main"."packages" WHERE "name" = \'%s\'' %
@@ -115,7 +120,7 @@ def update(prog):
         remove(up_info['name'])
         install(up_info['name'])
     else:
-        print('%s 无需升级' % (up_info['name']))
+        print(cop('info', '%s 无需升级' % (up_info['name'])))
 
 
 parser = argparse.ArgumentParser()
